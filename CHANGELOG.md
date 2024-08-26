@@ -1,31 +1,5 @@
 # nf-core/methylseq
 
-## [v2.6.0](https://github.com/nf-core/methylseq/releases/tag/2.6.0) - 2024-01-05
-
-### Bug fixes & refactoring
-
-- 🛠 Copy methylKit-compatible files to publishDir [#357](https://github.com/nf-core/methylseq/pull/357)
-- 🐛 fix `ignore_r1` and `ignore_3prime_r1` variable expansion [#359](https://github.com/nf-core/methylseq/pull/359)
-
-## [v2.5.0](https://github.com/nf-core/methylseq/releases/tag/2.5.0) - 2023-10-18
-
-### Pipeline Updates
-
-- 🔄 Updated template to nf-core/tools v2.9
-- 🔄 Updated template to nf-core/tools v2.10
-- 🔧 Updated nf-core modules for FastQC, samtools sort, samtools flagstat
-  - ❌ Removes problematic `-m` memory assignment for samtools sort [#81](https://github.com/nf-core/methylseq/issues/81)
-- 🧾 Use `fromSamplesheet` from nf-validation [#341](https://github.com/nf-core/methylseq/pull/341)
-- 🚀 Update Maintainers and add CODEOWNERS [#345](https://github.com/nf-core/methylseq/pull/345)
-- ⚙️ Update schema to utilize exists and add more patterns [#342](https://github.com/nf-core/methylseq/pull/342)
-- 📁 Support pipeline-specific configs [#343](https://github.com/nf-core/methylseq/pull/343)
-
-### Bug fixes & refactoring
-
-- 🛠️ Added publishing of coverage (`*cov.gz`) files for NOMe-seq filtered reads for `coverage2cytosine`
-- 🛠️ Wrong display values for "zymo" and "em_seq" presets on help page [#335](https://github.com/nf-core/methylseq/pull/335)
-- 📚 Use new Citation tools functions [#336](https://github.com/nf-core/methylseq/issues/336)
-
 ## [v2.4.0](https://github.com/nf-core/methylseq/releases/tag/2.4.0) - 2023-06-02
 
 ### Pipeline Updates
