@@ -1,30 +1,31 @@
-import os
-import shutil
-import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
-from typing import Annotated, List, Optional
-
+import os
+import subprocess
 import requests
-from flytekit.core.annotation import FlyteAnnotation
-from latch.executions import rename_current_execution, report_nextflow_used_storage
-from latch.ldata.path import LPath
-from latch.resources.tasks import custom_task, nextflow_runtime_task
+import shutil
+from pathlib import Path
+import typing
+import typing_extensions
+
 from latch.resources.workflow import workflow
-from latch.types import metadata
-from latch.types.directory import LatchDir, LatchOutputDir
+from latch.resources.tasks import nextflow_runtime_task, custom_task
 from latch.types.file import LatchFile
-from latch_cli.nextflow.utils import _get_execution_name
+from latch.types.directory import LatchDir, LatchOutputDir
+from latch.ldata.path import LPath
+from latch.executions import report_nextflow_used_storage
 from latch_cli.nextflow.workflow import get_flag
-from latch_cli.services.register.utils import import_module_by_path
+from latch_cli.nextflow.utils import _get_execution_name
 from latch_cli.utils import urljoins
+from latch.types import metadata
+from flytekit.core.annotation import FlyteAnnotation
+
+from latch_cli.services.register.utils import import_module_by_path
 
 meta = Path("latch_metadata") / "__init__.py"
 import_module_by_path(meta)
 import latch_metadata
-
 
 @custom_task(cpu=0.25, memory=0.5, storage_gib=1)
 def initialize() -> str:
@@ -48,76 +49,16 @@ def initialize() -> str:
     return resp.json()["name"]
 
 
-@dataclass(frozen=True)
-class Sample:
-    sample: Annotated[
-        str,
-        FlyteAnnotation(
-            {
-                "rules": [
-                    {
-                        "regex": r"^[^\s]+$",
-                        "message": "Sample name cannot contain spaces.",
-                    }
-                ]
-            }
-        ),
-    ]
-    fastq_1: LatchFile
-    fastq_2: Optional[LatchFile]
 
 
-class Genome(Enum):
-    hg38 = "hg38"
-    hg19 = "hg19"
-    mm10 = "mm10"
-
-
-input_construct_samplesheet = metadata._nextflow_metadata.parameters[
-    "input"
-].samplesheet_constructor
 
 
 @nextflow_runtime_task(cpu=4, memory=8, storage_gib=100)
-def nextflow_runtime(
-    pvc_name: str,
-    run_name: Annotated[
-        str,
-        FlyteAnnotation(
-            {
-                "rules": [
-                    {
-                        "regex": r"^[a-zA-Z0-9_-]+$",
-                        "message": "ID name must contain only letters, digits, underscores, and dashes. No spaces are allowed.",
-                    }
-                ],
-            }
-        ),
-    ],
-    input: List[Sample],
-    outdir: LatchOutputDir,
-    genome_source: str,
-    fasta: Optional[LatchFile],
-    bismark_index: Optional[LatchDir],
-    genome: Genome,
-    comprehensive: bool,
-    non_directional: bool,
-    cytosine_report: bool,
-    save_reference: bool,
-    save_align_intermeds: bool,
-    unmapped: bool,
-    save_trimmed: bool,
-    clip_r1: int,
-    clip_r2: int,
-    three_prime_clip_r1: int,
-    three_prime_clip_r2: int,
-    nextseq_trim: int,
-) -> None:
+def nextflow_runtime(pvc_name: str, input: LatchFile, outdir: typing_extensions.Annotated[LatchDir, FlyteAnnotation({'output': True})], email: typing.Optional[str], multiqc_title: typing.Optional[str], save_reference: typing.Optional[bool], save_align_intermeds: typing.Optional[bool], unmapped: typing.Optional[bool], save_trimmed: typing.Optional[bool], genome: typing.Optional[str], fasta: typing.Optional[LatchFile], fasta_index: typing.Optional[LatchFile], bismark_index: typing.Optional[LatchDir], bwa_meth_index: typing.Optional[LatchDir], comprehensive: typing.Optional[bool], pbat: typing.Optional[bool], rrbs: typing.Optional[bool], slamseq: typing.Optional[bool], em_seq: typing.Optional[bool], single_cell: typing.Optional[bool], accel: typing.Optional[bool], cegx: typing.Optional[bool], epignome: typing.Optional[bool], zymo: typing.Optional[bool], non_directional: typing.Optional[bool], cytosine_report: typing.Optional[bool], relax_mismatches: typing.Optional[bool], meth_cutoff: typing.Optional[int], known_splices: typing.Optional[str], local_alignment: typing.Optional[bool], minins: typing.Optional[int], maxins: typing.Optional[int], nomeseq: typing.Optional[bool], ignore_flags: typing.Optional[bool], methyl_kit: typing.Optional[bool], skip_trimming: typing.Optional[bool], skip_deduplication: typing.Optional[bool], skip_multiqc: typing.Optional[bool], multiqc_methods_description: typing.Optional[str], aligner: str, clip_r1: typing.Optional[int], clip_r2: typing.Optional[int], three_prime_clip_r1: typing.Optional[int], three_prime_clip_r2: typing.Optional[int], nextseq_trim: typing.Optional[int], num_mismatches: typing.Optional[float], no_overlap: typing.Optional[bool], ignore_r2: typing.Optional[int], ignore_3prime_r2: typing.Optional[int], min_depth: typing.Optional[int]) -> None:
     shared_dir = Path("/nf-workdir")
 
-    rename_current_execution(str(run_name))
 
-    input_samplesheet = input_construct_samplesheet(input)
+
 
     ignore_list = [
         "latch",
@@ -141,13 +82,13 @@ def nextflow_runtime(
     )
 
     profile_list = []
-    # if False:
-    #     profile_list.extend([p.value for p in execution_profiles])
+    if False:
+        profile_list.extend([p.value for p in execution_profiles])
 
     if len(profile_list) == 0:
         profile_list.append("standard")
 
-    profiles = ",".join(profile_list)
+    profiles = ','.join(profile_list)
 
     cmd = [
         "/root/nextflow",
@@ -160,37 +101,59 @@ def nextflow_runtime(
         "-c",
         "latch.config",
         "-resume",
-        *get_flag("input", input_samplesheet),
-        *get_flag("outdir", LatchOutputDir(f"{outdir.remote_path}/{run_name}")),
-        *get_flag("comprehensive", comprehensive),
-        *get_flag("non_directional", non_directional),
-        *get_flag("cytosine_report", cytosine_report),
-        *get_flag("save_reference", save_reference),
-        *get_flag("save_align_intermeds", save_align_intermeds),
-        *get_flag("unmapped", unmapped),
-        *get_flag("save_trimmed", save_trimmed),
-        *get_flag("clip_r1", clip_r1),
-        *get_flag("clip_r2", clip_r2),
-        *get_flag("three_prime_clip_r1", three_prime_clip_r1),
-        *get_flag("three_prime_clip_r2", three_prime_clip_r2),
-        *get_flag("nextseq_trim", nextseq_trim),
+                *get_flag('input', input),
+                *get_flag('outdir', outdir),
+                *get_flag('email', email),
+                *get_flag('multiqc_title', multiqc_title),
+                *get_flag('save_reference', save_reference),
+                *get_flag('save_align_intermeds', save_align_intermeds),
+                *get_flag('unmapped', unmapped),
+                *get_flag('save_trimmed', save_trimmed),
+                *get_flag('genome', genome),
+                *get_flag('fasta', fasta),
+                *get_flag('fasta_index', fasta_index),
+                *get_flag('bismark_index', bismark_index),
+                *get_flag('bwa_meth_index', bwa_meth_index),
+                *get_flag('aligner', aligner),
+                *get_flag('comprehensive', comprehensive),
+                *get_flag('pbat', pbat),
+                *get_flag('rrbs', rrbs),
+                *get_flag('slamseq', slamseq),
+                *get_flag('em_seq', em_seq),
+                *get_flag('single_cell', single_cell),
+                *get_flag('accel', accel),
+                *get_flag('cegx', cegx),
+                *get_flag('epignome', epignome),
+                *get_flag('zymo', zymo),
+                *get_flag('clip_r1', clip_r1),
+                *get_flag('clip_r2', clip_r2),
+                *get_flag('three_prime_clip_r1', three_prime_clip_r1),
+                *get_flag('three_prime_clip_r2', three_prime_clip_r2),
+                *get_flag('nextseq_trim', nextseq_trim),
+                *get_flag('non_directional', non_directional),
+                *get_flag('cytosine_report', cytosine_report),
+                *get_flag('relax_mismatches', relax_mismatches),
+                *get_flag('num_mismatches', num_mismatches),
+                *get_flag('meth_cutoff', meth_cutoff),
+                *get_flag('no_overlap', no_overlap),
+                *get_flag('ignore_r2', ignore_r2),
+                *get_flag('ignore_3prime_r2', ignore_3prime_r2),
+                *get_flag('known_splices', known_splices),
+                *get_flag('local_alignment', local_alignment),
+                *get_flag('minins', minins),
+                *get_flag('maxins', maxins),
+                *get_flag('nomeseq', nomeseq),
+                *get_flag('min_depth', min_depth),
+                *get_flag('ignore_flags', ignore_flags),
+                *get_flag('methyl_kit', methyl_kit),
+                *get_flag('skip_trimming', skip_trimming),
+                *get_flag('skip_deduplication', skip_deduplication),
+                *get_flag('skip_multiqc', skip_multiqc),
+                *get_flag('multiqc_methods_description', multiqc_methods_description)
     ]
 
-    if genome_source == "custom":
-        cmd += [
-            *get_flag("fasta", fasta),
-            # *get_flag("fasta_index", fasta_index),
-            *get_flag("bismark_index", bismark_index),
-        ]
-    elif genome_source == "igenome":
-        cmd += [
-            *get_flag("genome", genome),
-        ]
-    # todo() - compile Latch specific genomes
-    # elif genome_source == "latch_genome":
-
     print("Launching Nextflow Runtime")
-    print(" ".join(cmd))
+    print(' '.join(cmd))
     print(flush=True)
 
     failed = False
@@ -220,30 +183,26 @@ def nextflow_runtime(
             if name is None:
                 print("Skipping logs upload, failed to get execution name")
             else:
-                remote = LPath(
-                    urljoins("latch:///methylseq-logs/Methylseq", name, "nextflow.log")
-                )
+                remote = LPath(urljoins("latch:///your_log_dir/nf_nf_core_methylseq", name, "nextflow.log"))
                 print(f"Uploading .nextflow.log to {remote.path}")
                 remote.upload_from(nextflow_log)
 
         print("Computing size of workdir... ", end="")
         try:
             result = subprocess.run(
-                ["du", "-sb", str(shared_dir)],
+                ['du', '-sb', str(shared_dir)],
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                timeout=5 * 60,
+                timeout=5 * 60
             )
 
             size = int(result.stdout.split()[0])
             report_nextflow_used_storage(size)
             print(f"Done. Workdir size: {size / 1024 / 1024 / 1024: .2f} GiB")
         except subprocess.TimeoutExpired:
-            print(
-                "Failed to compute storage size: Operation timed out after 5 minutes."
-            )
+            print("Failed to compute storage size: Operation timed out after 5 minutes.")
         except subprocess.CalledProcessError as e:
             print(f"Failed to compute storage size: {e.stderr}")
         except Exception as e:
@@ -254,39 +213,7 @@ def nextflow_runtime(
 
 
 @workflow(metadata._nextflow_metadata)
-def Methylseq(
-    input: List[Sample],
-    run_name: Annotated[
-        str,
-        FlyteAnnotation(
-            {
-                "rules": [
-                    {
-                        "regex": r"^[a-zA-Z0-9_-]+$",
-                        "message": "ID name must contain only letters, digits, underscores, and dashes. No spaces are allowed.",
-                    }
-                ],
-            }
-        ),
-    ],
-    outdir: LatchOutputDir,
-    genome_source: str,
-    fasta: Optional[LatchFile] = None,
-    bismark_index: Optional[LatchDir] = None,
-    genome: Genome = Genome.hg38,
-    comprehensive: bool = False,
-    non_directional: bool = False,
-    cytosine_report: bool = False,
-    save_reference: bool = False,
-    save_align_intermeds: bool = False,
-    unmapped: bool = False,
-    save_trimmed: bool = False,
-    clip_r1: int = 10,
-    clip_r2: int = 10,
-    three_prime_clip_r1: int = 10,
-    three_prime_clip_r2: int = 10,
-    nextseq_trim: int = 0,
-) -> None:
+def nf_nf_core_methylseq(input: LatchFile, outdir: typing_extensions.Annotated[LatchDir, FlyteAnnotation({'output': True})], email: typing.Optional[str], multiqc_title: typing.Optional[str], save_reference: typing.Optional[bool], save_align_intermeds: typing.Optional[bool], unmapped: typing.Optional[bool], save_trimmed: typing.Optional[bool], genome: typing.Optional[str], fasta: typing.Optional[LatchFile], fasta_index: typing.Optional[LatchFile], bismark_index: typing.Optional[LatchDir], bwa_meth_index: typing.Optional[LatchDir], comprehensive: typing.Optional[bool], pbat: typing.Optional[bool], rrbs: typing.Optional[bool], slamseq: typing.Optional[bool], em_seq: typing.Optional[bool], single_cell: typing.Optional[bool], accel: typing.Optional[bool], cegx: typing.Optional[bool], epignome: typing.Optional[bool], zymo: typing.Optional[bool], non_directional: typing.Optional[bool], cytosine_report: typing.Optional[bool], relax_mismatches: typing.Optional[bool], meth_cutoff: typing.Optional[int], known_splices: typing.Optional[str], local_alignment: typing.Optional[bool], minins: typing.Optional[int], maxins: typing.Optional[int], nomeseq: typing.Optional[bool], ignore_flags: typing.Optional[bool], methyl_kit: typing.Optional[bool], skip_trimming: typing.Optional[bool], skip_deduplication: typing.Optional[bool], skip_multiqc: typing.Optional[bool], multiqc_methods_description: typing.Optional[str], aligner: str = 'bismark', clip_r1: typing.Optional[int] = 0, clip_r2: typing.Optional[int] = 0, three_prime_clip_r1: typing.Optional[int] = 0, three_prime_clip_r2: typing.Optional[int] = 0, nextseq_trim: typing.Optional[int] = 0, num_mismatches: typing.Optional[float] = 0.6, no_overlap: typing.Optional[bool] = True, ignore_r2: typing.Optional[int] = 2, ignore_3prime_r2: typing.Optional[int] = 2, min_depth: typing.Optional[int] = 0) -> None:
     """
     nf-core/methylseq
 
@@ -294,25 +221,5 @@ def Methylseq(
     """
 
     pvc_name: str = initialize()
-    nextflow_runtime(
-        pvc_name=pvc_name,
-        run_name=run_name,
-        input=input,
-        outdir=outdir,
-        genome_source=genome_source,
-        fasta=fasta,
-        bismark_index=bismark_index,
-        genome=genome,
-        comprehensive=comprehensive,
-        non_directional=non_directional,
-        cytosine_report=cytosine_report,
-        save_reference=save_reference,
-        save_align_intermeds=save_align_intermeds,
-        unmapped=unmapped,
-        save_trimmed=save_trimmed,
-        clip_r1=clip_r1,
-        clip_r2=clip_r2,
-        three_prime_clip_r1=three_prime_clip_r1,
-        three_prime_clip_r2=three_prime_clip_r2,
-        nextseq_trim=nextseq_trim,
-    )
+    nextflow_runtime(pvc_name=pvc_name, input=input, outdir=outdir, email=email, multiqc_title=multiqc_title, save_reference=save_reference, save_align_intermeds=save_align_intermeds, unmapped=unmapped, save_trimmed=save_trimmed, genome=genome, fasta=fasta, fasta_index=fasta_index, bismark_index=bismark_index, bwa_meth_index=bwa_meth_index, aligner=aligner, comprehensive=comprehensive, pbat=pbat, rrbs=rrbs, slamseq=slamseq, em_seq=em_seq, single_cell=single_cell, accel=accel, cegx=cegx, epignome=epignome, zymo=zymo, clip_r1=clip_r1, clip_r2=clip_r2, three_prime_clip_r1=three_prime_clip_r1, three_prime_clip_r2=three_prime_clip_r2, nextseq_trim=nextseq_trim, non_directional=non_directional, cytosine_report=cytosine_report, relax_mismatches=relax_mismatches, num_mismatches=num_mismatches, meth_cutoff=meth_cutoff, no_overlap=no_overlap, ignore_r2=ignore_r2, ignore_3prime_r2=ignore_3prime_r2, known_splices=known_splices, local_alignment=local_alignment, minins=minins, maxins=maxins, nomeseq=nomeseq, min_depth=min_depth, ignore_flags=ignore_flags, methyl_kit=methyl_kit, skip_trimming=skip_trimming, skip_deduplication=skip_deduplication, skip_multiqc=skip_multiqc, multiqc_methods_description=multiqc_methods_description)
+
